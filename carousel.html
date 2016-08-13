@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>Document</title>
+    <link rel="stylesheet" href="./carousel.css">
+</head>
+<body>
+    <div class="carousel">
+        <div class="main" id="carousel-image-container">
+            <img src="images/5.jpg" alt="">
+            <img src="images/1.jpg" alt="">
+            <img src="images/2.jpg" alt="">
+            <img src="images/3.jpg" alt="">
+            <img src="images/4.jpg" alt="">
+            <img src="images/5.jpg" alt="">
+            <img src="images/1.jpg" alt="">
+        </div>
+        <ul class="carousel-navigator clearfix">
+            <div class="container">
+                <li>
+                    <button id="carousel-prev-button">&lt</button>
+                </li>
+                <li>
+                    <button id="carousel-next-button">&gt</button>
+                </li>
+            </div>
+        </ul>
+        <ul class="carousel-buttons">
+            <li>
+                <button class="carousel-button-active" id="carousel-buttons-1"></button>
+            </li>
+            <li>
+                <button id="carousel-buttons-2"></button>
+            </li>
+            <li>
+                <button id="carousel-buttons-3"></button>
+            </li>
+            <li>
+                <button id="carousel-buttons-4"></button>
+            </li>
+            <li>
+                <button id="carousel-buttons-5"></button>
+            </li>
+        </ul>
+    </div>
+
+    <script src="scripts/observer.js"></script>
+<script>
+
+
+
+    (function(window, config) {
+        var document = window.document;
+        var $ = document.querySelector.bind(document);
+        var buttonsContainer = $('.carousel-buttons');
+        var currentImg = 0;
+
+        function extend(child, parent) {
+            function Ctor() {parent.constructor = child;}
+            Ctor.prototype = parent.prototype;
+            child.prototype = new Ctor();
+            return child;
+        }
+
+        function ImgView(selector) {
+            this.imagesContainer = selector || $('#carousel-image-container');
+            this.imgLength = this.imagesContainer.children.length - 2;
+            this.lastImgIndex = 0;
+
+        }
+
+        extend(ImgView, OB);
+
+        ImgView.prototype.getContainerWidth = function() {
+            return parseInt(getComputedStyle($('.carousel')).width);
+        };
+
+        // TODO 需要保证同时只有一个RAF在运行, 或者说解决只移动一半的问题
+        ImgView.prototype.moveHorizontal = function(target, offset, speed, callback) {
+            offset = parseInt(offset);
+            var start = null;
+            var from = parseInt(window.getComputedStyle(target).left);
+
+            function handler(ts) {
+                if (!start) start = ts;
+                var process = ts - start;
+                var distance;
+                if (offset > 0) {
+                    distance = Math.min(process * speed, offset);
+                } else {
+                    distance = -Math.min(process * speed, -offset);
+                }
+
+                target.style.left = from + distance + 'px';
+
+                if (process * speed < Math.abs(offset)) {
+                    window.animateId = window.requestAnimationFrame(handler.bind(this));
+                } else if(callback) {
+                    window.cancelAnimationFrame(window.animateId, callback.bind(this));
+                    // 动画结束, 运行回调函数
+                    callback.bind(this);
+                }
+            }
+            window.requestAnimationFrame(handler.bind(this));
+
+        };
+
+
+        function ButtonView() {};
+        extend(ButtonView, OB);
+
+        var imgView = new ImgView();
+        var buttonView = new ButtonView();
+
+        // 绑定事件
+        imgView.on('nav', function(index) {
+            var moveOffset = 0;
+            // 做一些边界处理
+            if (this.lastImgIndex === this.imgLength - 1 && index - this.lastImgIndex === -(this.imgLength - 1)) {
+                // 到了最后一张, 准备跳到第一张
+                moveOffset = -this.getContainerWidth();
+                this.moveHorizontal(this.imagesContainer, moveOffset, 1, function() {
+                    // 调节图片位置
+                    this.imagesContainer.style.left = -this.getContainerWidth();
+                });
+            } else if (this.lastImgIndex === 0 && index - this.lastImgIndex === (this.imgLength - 1)) {
+                // 到了第一张, 准备跳到最后一张
+                moveOffset = this.getContainerWidth();
+                this.moveHorizontal(this.imagesContainer, moveOffset, 1, function() {
+                    // 调节图片位置
+                    this.imagesContainer.style.left = -this.getContainerWidth() * this.imgLength + 2 - 1;
+                });
+            } else {
+                moveOffset = - this.getContainerWidth() * (index - this.lastImgIndex); // left为负才能向右移动
+                this.moveHorizontal(this.imagesContainer, moveOffset, 1);
+            }
+
+            this.lastImgIndex = index;
+        });
+
+        buttonView.on('nav', function(index) {
+            changeButtonActive(index);
+        });
+
+        function changeButtonActive(index) {
+            var length = buttonsContainer.children.length;
+            for (var i = 0; i < length; i++) {
+                buttonsContainer.children[i].children[0].classList.remove('carousel-button-active');
+            }
+            buttonsContainer.children[index].children[0].classList.add('carousel-button-active');
+        }
+
+
+        var navigatorGroup = $('.carousel-navigator');
+        navigatorGroup.addEventListener('click', function(event) {
+            if (event.target.matches('#carousel-next-button')) {
+                currentImg = (currentImg + 1) % imgView.imgLength;
+                imgView.emmit('nav', currentImg);
+                buttonView.emmit('nav', currentImg);
+            }
+            else if (event.target.matches('#carousel-prev-button')) {
+                currentImg === 0 ? currentImg = imgView.imgLength - 1 : currentImg--;
+                imgView.emmit('nav', currentImg);
+                buttonView.emmit('nav', currentImg);
+            }
+        });
+
+
+
+
+
+        
+    })(window);
+
+</script>
+</body>
+</html>
