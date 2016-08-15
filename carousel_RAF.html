@@ -116,6 +116,13 @@
 
         function ButtonView() {};
         extend(ButtonView, OB);
+        ButtonView.prototype.changeButtonActive = function(index) {
+            var length = buttonsContainer.children.length;
+            for (var i = 0; i < length; i++) {
+                buttonsContainer.children[i].children[0].classList.remove('carousel-button-active');
+            }
+            buttonsContainer.children[index].children[0].classList.add('carousel-button-active');
+        };
 
         var imgView = new ImgView();
         var buttonView = new ButtonView();
@@ -152,21 +159,15 @@
         });
 
         buttonView.on('nav', function(index) {
-            changeButtonActive(index);
-        });
+            this.changeButtonActive(index);
+        }.bind(buttonView));
 
-        function changeButtonActive(index) {
-            var length = buttonsContainer.children.length;
-            for (var i = 0; i < length; i++) {
-                buttonsContainer.children[i].children[0].classList.remove('carousel-button-active');
-            }
-            buttonsContainer.children[index].children[0].classList.add('carousel-button-active');
-        }
+
+
 
 
         var currentImg = 0;
         var navigatorGroup = $('.carousel-navigator');
-        var canClick = true;
         navigatorGroup.addEventListener('click', function(event) {
 
             if (imgView.isBusy()) return;
@@ -182,6 +183,24 @@
                 buttonView.emmit('nav', currentImg);
             }
         });
+
+        var buttonNavGroup = $('.carousel-buttons');
+        buttonNavGroup.addEventListener('click', function(event) {
+            if (imgView.isBusy()) return;
+            var length = buttonNavGroup.children.length;
+            var children = buttonNavGroup.children;
+            var target = event.target;
+            for (var i = 0; i < length; i++) {
+                if (target === children[i].firstElementChild) {
+                    currentImg = i;
+                    imgView.emmit('nav', i);
+                    buttonView.emmit('nav', i);
+                    break;
+                }
+            }
+        });
+
+
 
         // 自动播放
 //        setTimeout(function() {
