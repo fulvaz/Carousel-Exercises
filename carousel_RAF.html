@@ -7,7 +7,7 @@
 </head>
 <body>
     <div class="carousel">
-        <div class="main animateLeft" id="carousel-image-container">
+        <div class="main" id="carousel-image-container">
             <img src="images/5.jpg" alt="">
             <img src="images/1.jpg" alt="">
             <img src="images/2.jpg" alt="">
@@ -49,15 +49,11 @@
 <script>
 
 
-    var config = {
-
-    };
 
     (function(window, config) {
         var document = window.document;
         var $ = document.querySelector.bind(document);
         var buttonsContainer = $('.carousel-buttons');
-        var currentImg = 0;
 
         function extend(child, parent) {
             function Ctor() {parent.constructor = child;}
@@ -70,16 +66,25 @@
             this.imagesContainer = selector || $('#carousel-image-container');
             this.imgLength = this.imagesContainer.children.length - 2;
             this.lastImgIndex = 0;
+            this._busy = false;
 
         }
 
         extend(ImgView, OB);
 
+        ImgView.prototype.isBusy = function() {
+            return this._busy;
+        };
+
+        ImgView.prototype.setBusy = function(boolean) {
+            this._busy = boolean;
+        }
+
         ImgView.prototype.getContainerWidth = function() {
-            // 为了以后的响应式设计, 这里没有做缓存, 也许会很浪费资源
             return parseInt(getComputedStyle($('.carousel')).width);
         };
 
+        // TODO 需要保证同时只有一个RAF在运行, 或者说解决只移动一半的问题
         ImgView.prototype.moveHorizontal = function(target, offset, speed, callback) {
             offset = parseInt(offset);
             var start = null;
@@ -100,9 +105,8 @@
                 if (process * speed < Math.abs(offset)) {
                     window.animateId = window.requestAnimationFrame(handler.bind(this));
                 } else if(callback) {
-                    window.cancelAnimationFrame(window.animateId, callback.bind(this));
                     // 动画结束, 运行回调函数
-                    callback.bind(this);
+                    callback();
                 }
             }
             window.requestAnimationFrame(handler.bind(this));
@@ -117,43 +121,34 @@
         var buttonView = new ButtonView();
 
         // 绑定事件
-        imgView.on('nav', function(currentIndex) {
-            var imgWidth = this.getContainerWidth();
-            var currentPos = 0;
-
-            // 做两端越界判断
-            if (this.lastImgIndex === this.imgLength - 1 && currentIndex === 0) {
-                // 从最后一张跳到第一张
-                currentPos = - (this.imgLength + 1) * imgWidth;
-                this.imagesContainer.style.left = currentPos + 'px';
-            } else if (this.lastImgIndex === 0 && currentIndex === this.imgLength - 1) {
-                // 从第一张跳到最后一张
-                currentPos = 0;
-                this.imagesContainer.style.left = currentPos + 'px';
+        imgView.on('nav', function(index) {
+            this.setBusy(true);
+            var moveOffset = 0;
+            // 做一些边界处理
+            if (this.lastImgIndex === this.imgLength - 1 && index - this.lastImgIndex === -(this.imgLength - 1)) {
+                // 到了最后一张, 准备跳到第一张
+                moveOffset = -this.getContainerWidth();
+                this.moveHorizontal(this.imagesContainer, moveOffset, 10, function() {
+                    // 调节图片位置
+                    this.imagesContainer.style.left = -this.getContainerWidth() + 'px';
+                    this.setBusy(false);
+                }.bind(this));
+            } else if (this.lastImgIndex === 0 && index - this.lastImgIndex === (this.imgLength - 1)) {
+                // 到了第一张, 准备跳到最后一张
+                moveOffset = this.getContainerWidth();
+                this.moveHorizontal(this.imagesContainer, moveOffset, 10, function() {
+                    // 调节图片位置
+                    this.imagesContainer.style.left = -this.getContainerWidth() * this.imgLength + 2 - 1;
+                    this.setBusy(false);
+                }.bind(this));
             } else {
-                // 普通导航
-                // +1是因为第一个img是过度图片, 我们应该从第二张开始展示
-                currentPos = - (currentIndex + 1) * imgWidth;
-                this.imagesContainer.style.left = currentPos + 'px';
+                moveOffset = - this.getContainerWidth() * (index - this.lastImgIndex); // left为负才能向右移动
+                this.moveHorizontal(this.imagesContainer, moveOffset, 10, function() {
+                    this.setBusy(false);
+                }.bind(this));
             }
 
-            // 做一些判断, 图片是否在过度位置
-            // 因为页面是异步更新的, 这里left获得的其实是处理前的代码, 即上面代码是无效的, 我们需要手动更新, 已经在上述代码中修改好了..
-            // 当前在最后一张的过渡照片, 放回适合的地方
-            // 先去掉动画
-            this.imagesContainer.classList.remove('animateLeft');
-            if (currentPos >= 0) {
-                this.imagesContainer.style = this.imagesContainer.style.left = -(this.imgLength) * imgWidth + 'px';
-            }
-            // 在第一张照片的过渡照片处, 回到第一张
-            else if (currentPos <= -(this.imgLength + 1) * imgWidth) {
-                this.imagesContainer.style.left = -imgWidth + 'px';
-            }
-            this.imagesContainer.classList.add('animateLeft');
-
-            this.lastImgIndex = currentIndex;
-
-
+            this.lastImgIndex = index;
         });
 
         buttonView.on('nav', function(index) {
@@ -169,11 +164,13 @@
         }
 
 
+        var currentImg = 0;
         var navigatorGroup = $('.carousel-navigator');
-        var ifPressed = false;
+        var canClick = true;
         navigatorGroup.addEventListener('click', function(event) {
-            if (ifPressed) return;
-            else ifPressed = true;
+
+            if (imgView.isBusy()) return;
+
             if (event.target.matches('#carousel-next-button')) {
                 currentImg = (currentImg + 1) % imgView.imgLength;
                 imgView.emmit('nav', currentImg);
@@ -184,11 +181,23 @@
                 imgView.emmit('nav', currentImg);
                 buttonView.emmit('nav', currentImg);
             }
-            setTimeout(function() {
-                ifPressed = false;
-            }, 100);  // TODO config!
         });
-    })(window, config);
+
+        // 自动播放
+//        setTimeout(function() {
+//            function handler() {
+//                if (!imgView.isBusy()) {
+//                    currentImg = (currentImg + 1) % imgView.imgLength;
+//                    imgView.emmit('nav', currentImg);
+//                    buttonView.emmit('nav', currentImg);
+//                }
+//                setTimeout(handler, 100);
+//            }
+//            handler();
+//
+//        }, 100);
+
+    })(window);
 
 </script>
 </body>
